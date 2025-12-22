@@ -1,3 +1,4 @@
+#include "hip/hip_runtime.h"
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property
@@ -7,7 +8,9 @@
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 #pragma once
-#include <cuda.h>
+#include <hip/hip_runtime.h>
+#undef warpSize
+
 #include <stdint.h>
 
 //------------------------------------------------------------------------
@@ -19,7 +22,7 @@ dim3 getLaunchGridSize(dim3 blockSize, int width, int height, int depth);
 //------------------------------------------------------------------------
 // The rest is CUDA device code specific stuff.
 
-#ifdef __CUDACC__
+#ifdef __HIPCC__
 
 //------------------------------------------------------------------------
 // Helpers for CUDA vector types.
@@ -216,7 +219,7 @@ static __device__ __forceinline__ float triidx_to_float(int x)   { if (x <= 0x01
     } while(0)
 
 #define CA_SET_GROUP(group) \
-    CA_SET_GROUP_MASK((group), 0xffffffffu)
+    CA_SET_GROUP_MASK((group), ~0ull)
 
 #define caAtomicAdd(ptr, value)         \
     do {                                \
@@ -260,4 +263,18 @@ static __device__ __forceinline__ float triidx_to_float(int x)   { if (x <= 0x01
 #endif // __CUDA_ARCH__ >= 700
 
 //------------------------------------------------------------------------
-#endif // __CUDACC__
+#endif // __HIPCC__
+
+#if defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_HCC__)
+  #define __all_sync(mask, pred) __all(pred)
+  #define __any_sync(mask, pred) __any(pred)
+//   #define __ballot_sync(mask, pred) __ballot(pred)
+//   #define __shfl_sync(mask, val, src) __shfl(val, src)
+//   #define __shfl_up_sync(mask, val, delta) __shfl_up(val, delta)
+//   #define __shfl_down_sync(mask, val, delta) __shfl_down(val, delta)
+//   #define __shfl_xor_sync(mask, val, laneMask) __shfl_xor(val, laneMask)
+#endif
+
+#ifndef NVDR_CHECK
+#define NVDR_CHECK(COND, ...) TORCH_CHECK(COND, __VA_ARGS__)
+#endif

@@ -1,3 +1,5 @@
+#include "hip/hip_runtime.h"
+#define __ballot_sync(mask, predicate) __ballot(predicate)
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property

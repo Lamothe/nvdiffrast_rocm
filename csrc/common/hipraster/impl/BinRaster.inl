@@ -84,11 +84,11 @@ __device__ __inline__ void binRasterImpl(const CRParams p)
                     num = triSubtris[triIdx];
 
                 // cumulative sum of subtriangles within each warp
-                U32 myIdx = __popc(__ballot_sync(~0u, num & 1) & getLaneMaskLt());
-                if (__any_sync(~0u, num > 1))
+                U32 myIdx = __popc(__ballot_sync((unsigned long long)(~0u), num & 1) & getLaneMaskLt());
+                if (__any_sync((unsigned long long)(~0u), num > 1))
                 {
-                    myIdx += __popc(__ballot_sync(~0u, num & 2) & getLaneMaskLt()) * 2;
-                    myIdx += __popc(__ballot_sync(~0u, num & 4) & getLaneMaskLt()) * 4;
+                    myIdx += __popc(__ballot_sync((unsigned long long)(~0u), num & 2) & getLaneMaskLt()) * 2;
+                    myIdx += __popc(__ballot_sync((unsigned long long)(~0u), num & 4) & getLaneMaskLt()) * 4;
                 }
                 if (threadIdx.x == 31) // Do not assume that last thread in warp wins the write.
                     s_broadcast[threadIdx.y + 16] = myIdx + num;
@@ -97,7 +97,7 @@ __device__ __inline__ void binRasterImpl(const CRParams p)
                 // cumulative sum of per-warp subtriangle counts
                 // Note: cannot have more than 32 warps or this needs to sync between each step.
                 bool act = (thrInBlock < CR_BIN_WARPS);
-                U32 actMask = __ballot_sync(~0u, act);
+                U32 actMask = __ballot_sync((unsigned long long)(~0u), act);
                 if (threadIdx.y == 0 && act)
                 {
                     volatile U32* ptr = &s_broadcast[thrInBlock + 16];
@@ -196,7 +196,7 @@ __device__ __inline__ void binRasterImpl(const CRParams p)
             // setup bounding box and edge functions, and rasterize
             S32 lox, loy, hix, hiy;
             bool hasTri = (thrInBlock < bufCount);
-            U32 hasTriMask = __ballot_sync(~0u, hasTri);
+            U32 hasTriMask = __ballot_sync((unsigned long long)(~0u), hasTri);
             if (hasTri)
             {
                 S32 v0x = add_s16lo_s16lo(triData.x, p.widthPixelsVp  * (CR_SUBPIXEL_SIZE >> 1));
@@ -214,17 +214,17 @@ __device__ __inline__ void binRasterImpl(const CRParams p)
                 U32 bit = 1 << threadIdx.x;
 #if __CUDA_ARCH__ >= 700
                 bool multi = (hix != lox || hiy != loy);
-                if (!__any_sync(hasTriMask, multi))
+                if (!__any_sync((unsigned long long)(hasTriMask), multi))
                 {
                     int binIdx = lox + p.widthBins * loy;
-                    U32 mask = __match_any_sync(hasTriMask, binIdx);
+                    U32 mask = __match_any_sync((unsigned long long)(hasTriMask), binIdx);
                     s_outMask[threadIdx.y][binIdx] = mask;
                     __syncwarp(hasTriMask);
                 } else
 #endif
                 {
                     bool complex = (hix > lox+1 || hiy > loy+1);
-                    if (!__any_sync(hasTriMask, complex))
+                    if (!__any_sync((unsigned long long)(hasTriMask), complex))
                     {
                         int binIdx = lox + p.widthBins * loy;
                         atomicOr((U32*)&s_outMask[threadIdx.y][binIdx], bit);
@@ -276,7 +276,7 @@ __device__ __inline__ void binRasterImpl(const CRParams p)
 
             int overIndex = -1;
             bool act = (thrInBlock < p.numBins);
-            U32 actMask = __ballot_sync(~0u, act);
+            U32 actMask = __ballot_sync((unsigned long long)(~0u), act);
             if (act)
             {
                 U8* srcPtr = (U8*)&s_outMask[0][thrInBlock];
@@ -293,7 +293,7 @@ __device__ __inline__ void binRasterImpl(const CRParams p)
                 // overflow => request a new segment
                 int ofs = s_outOfs[thrInBlock];
                 bool ovr = (((ofs - 1) >> CR_BIN_SEG_LOG2) != (((ofs - 1) + total) >> CR_BIN_SEG_LOG2));
-                U32 ovrMask = __ballot_sync(actMask, ovr);
+                U32 ovrMask = __ballot_sync((unsigned long long)(actMask), ovr);
                 if (ovr)
                 {
                     overIndex = __popc(ovrMask & getLaneMaskLt());

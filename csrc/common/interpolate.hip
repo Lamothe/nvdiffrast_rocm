@@ -1,3 +1,8 @@
+#define __ballot_sync(mask, predicate) __ballot(predicate)
+
+#include <hip/hip_runtime.h>
+#undef warpSize
+#include <torch/extension.h>
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property
@@ -36,7 +41,7 @@ static __forceinline__ __device__ void InterpolateFwdKernelTemplate(const Interp
 
     // If no geometry in entire warp, zero the output and exit.
     // Otherwise force barys to zero and output with live threads.
-    if (__all_sync(0xffffffffu, !triValid))
+    if (__all_sync((unsigned long long)(~0ull), !triValid))
     {
         for (int i=0; i < p.numAttr; i++)
             out[i] = 0.f;
