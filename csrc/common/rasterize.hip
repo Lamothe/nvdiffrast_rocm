@@ -1,3 +1,10 @@
+// UNDEFINE FIRST (Before any includes)
+#ifdef HIP_ENABLE_WARP_SYNC_BUILTINS
+#undef HIP_ENABLE_WARP_SYNC_BUILTINS
+#endif
+
+#define __ballot_sync(mask, predicate) __ballot(predicate)
+
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property

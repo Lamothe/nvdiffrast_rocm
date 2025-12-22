@@ -19,7 +19,7 @@ __device__ __inline__ void initTileZMax(U32& tileZMax, bool& tileZUpd, volatile 
 __device__ __inline__ void updateTileZMax(U32& tileZMax, bool& tileZUpd, volatile U32* tileDepth, volatile U32* temp)
 {
     // Entry is warp-coherent.
-    if (__any_sync(~0u, tileZUpd))
+    if (__any_sync((unsigned long long)(~0u), tileZUpd))
     {
         U32 z = ::max(tileDepth[threadIdx.x], tileDepth[threadIdx.x + 32]); __syncwarp();
         temp[threadIdx.x + 16] = z; __syncwarp();
@@ -155,7 +155,7 @@ __device__ __inline__ void executeROP(U32 color, U32 depth, volatile U32* pColor
     __syncwarp(ropMask);
     bool act = (depth == *pDepth);
     __syncwarp(ropMask);
-    U32 actMask = __ballot_sync(ropMask, act);
+    U32 actMask = __ballot_sync((unsigned long long)(ropMask), act);
     if (act)
     {
         *pDepth = 0;
@@ -292,7 +292,7 @@ __device__ __inline__ void fineRasterImpl(const CRParams p)
                     fragWrite += scan32_total(temp);
 
                     // queue non-empty triangles
-                    U32 goodMask = __ballot_sync(~0u, pop != 0);
+                    U32 goodMask = __ballot_sync((unsigned long long)(~0u), pop != 0);
                     if (pop != 0)
                     {
                         int idx = (triWrite + __popc(goodMask & getLaneMaskLt())) & 63;
@@ -324,11 +324,11 @@ __device__ __inline__ void fineRasterImpl(const CRParams p)
             __syncwarp();
 
             int ropLaneIdx = threadIdx.x;
-            U32 boundaryMask = __ballot_sync(~0u, temp[ropLaneIdx + 16]);
+            U32 boundaryMask = __ballot_sync((unsigned long long)(~0u), temp[ropLaneIdx + 16]);
 
             // distribute fragments
             bool hasFragment = (ropLaneIdx < fragWrite - fragRead);
-            U32 fragmentMask = __ballot_sync(~0u, hasFragment);
+            U32 fragmentMask = __ballot_sync((unsigned long long)(~0u), hasFragment);
             if (hasFragment)
             {
                 int triBufIdx = (triRead + __popc(boundaryMask & getLaneMaskLt())) & 63;
@@ -356,7 +356,7 @@ __device__ __inline__ void fineRasterImpl(const CRParams p)
                         tileZUpd = true; // we are replacing previous zmax => need to update
                 }
 
-                U32 ropMask = __ballot_sync(fragmentMask, !zkill);
+                U32 ropMask = __ballot_sync((unsigned long long)(fragmentMask), !zkill);
                 if (!zkill)
 					executeROP(td.w, depth, &tileColor[pixelInTile], &tileDepth[pixelInTile], ropMask);
             }
