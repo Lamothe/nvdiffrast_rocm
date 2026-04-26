@@ -1,3 +1,4 @@
+#include "hip/hip_runtime.h"
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property

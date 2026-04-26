@@ -8,13 +8,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nvdiffrast"
-version = "0.4.0"
-description = "nvdiffrast - modular primitives for high-performance differentiable rendering"
+version = "0.4.0+rocm"
+description = "nvdiffrast - modular primitives for high-performance differentiable rendering (ROCm)"
 readme = "README.md"
 requires-python = ">=3.6"
 #license = "LicenseRef-NSCL"
 #license-files = ["LICENSE.txt"]
-authors = [{name = "Samuli Laine", email = "slaine@nvidia.com"}]
+authors = [
+  { name = "Samuli Laine", email = "slaine@nvidia.com" },
+  { name = "Michael Lamothe", email = "michael.lamothe@gmail.com" }
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",

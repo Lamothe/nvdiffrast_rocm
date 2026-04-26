@@ -1,3 +1,21 @@
+// --- START FIX FOR ROCM 7.x / GFX1151 ---
+// 1. Force-disable the broken system builtins BEFORE any includes
+#ifdef HIP_ENABLE_WARP_SYNC_BUILTINS
+  #undef HIP_ENABLE_WARP_SYNC_BUILTINS
+#endif
+#define HIP_ENABLE_WARP_SYNC_BUILTINS 0
+
+// 2. Now it is safe to include the system headers
+#include <torch/extension.h>
+#include <hip/hip_runtime.h>
+
+// 3. Manually define the missing function AFTER the headers are loaded
+// This ensures we don't conflict with the system, but we provide the logic nvdiffrast needs.
+#ifndef __ballot_sync
+  #define __ballot_sync(mask, predicate) __ballot(predicate)
+#endif
+// --- END FIX ---
+
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property
@@ -65,7 +83,7 @@ public:
     __device__ __forceinline__ HashIndex(const AntialiasKernelParams& p, uint64_t key)
     {
         m_mask = (p.allocTriangles << AA_LOG_HASH_ELEMENTS_PER_TRIANGLE(p.allocTriangles)) - 1; // This should work until triangle count exceeds 1073741824.
-        m_idx  = (uint32_t)(key & 0xffffffffu);
+        m_idx  = (uint32_t)(key & ~0ull);
         m_skip = (uint32_t)(key >> 32);
         uint32_t dummy = JENKINS_MAGIC;
         jenkins_mix(m_idx, m_skip, dummy);
@@ -112,7 +130,7 @@ static __device__ __forceinline__ void evhash_insert_vertex(const AntialiasKerne
 {
     if (va == vb)
         return;
-    
+
     uint64_t v0 = (uint32_t)min(va, vb) + 1; // canonical vertex order
     uint64_t v1 = (uint32_t)max(va, vb) + 1;
     uint64_t vk = v0 | (v1 << 32); // hash key
@@ -405,7 +423,7 @@ __global__ void AntialiasGradKernel(const AntialiasKernelParams p)
 
         // Read work item filled out by forward kernel.
         int4 item = p.workBuffer[thread_idx + 1];
-        unsigned int amask = __ballot_sync(0xffffffffu, item.w);
+        unsigned int amask = __ballot_sync((unsigned long long)(~0ull), item.w);
         if (item.w == 0)
             continue; // No effect.
 
@@ -429,7 +447,7 @@ __global__ void AntialiasGradKernel(const AntialiasKernelParams p)
 
         // Bail out if triangle index is corrupt.
         bool triFail = (tri < 0 || tri >= p.numTriangles);
-        amask = __ballot_sync(amask, !triFail);
+        amask = __ballot_sync((unsigned long long)(amask), !triFail);
         if (triFail)
             continue;
 
@@ -463,7 +481,7 @@ __global__ void AntialiasGradKernel(const AntialiasKernelParams p)
 
         // If position weight is zero, skip the rest.
         bool noGrad = (dd == 0.f);
-        amask = __ballot_sync(amask, !noGrad);
+        amask = __ballot_sync((unsigned long long)(amask), !noGrad);
         if (noGrad)
             continue;
 
@@ -475,7 +493,7 @@ __global__ void AntialiasGradKernel(const AntialiasKernelParams p)
 
         // Bail out if vertex indices are corrupt.
         bool vtxFail = (vi1 < 0 || vi1 >= p.numVertices || vi2 < 0 || vi2 >= p.numVertices);
-        amask = __ballot_sync(amask, !vtxFail);
+        amask = __ballot_sync((unsigned long long)(amask), !vtxFail);
         if (vtxFail)
             continue;
 

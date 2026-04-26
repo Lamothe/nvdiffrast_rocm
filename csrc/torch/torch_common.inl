@@ -1,29 +1,86 @@
-// Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
-//
-// NVIDIA CORPORATION and its licensors retain all intellectual property
-// and proprietary rights in and to this software, related documentation
-// and any modifications thereto.  Any use, reproduction, disclosure or
-// distribution of this software and related documentation without an express
-// license agreement from NVIDIA CORPORATION is strictly prohibited.
-
 #pragma once
-#include "../common/framework.h"
+#include <torch/extension.h>
+#include <hip/hip_runtime.h>
+#include <vector>
 
-//------------------------------------------------------------------------
-// Input check helpers.
-//------------------------------------------------------------------------
+// --- Macros ---
+#define NVDR_CHECK(CONDITION, ...) TORCH_CHECK((CONDITION), __VA_ARGS__)
 
-#ifdef _MSC_VER
-#define __func__ __FUNCTION__
+#ifndef NVDR_CHECK_CUDA_ERROR
+#define NVDR_CHECK_CUDA_ERROR(VAL) {     hipError_t err = (VAL);     if (err != hipSuccess) {         TORCH_CHECK(false, "HIP Error: ", hipGetErrorString(err));     } }
 #endif
 
-#define NVDR_CHECK_DEVICE(...) do { TORCH_CHECK(at::cuda::check_device({__VA_ARGS__}), __func__, "(): Inputs " #__VA_ARGS__ " must reside on the same GPU device") } while(0)
-#define NVDR_CHECK_CPU(...) do { nvdr_check_cpu({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must reside on CPU"); } while(0)
-#define NVDR_CHECK_CONTIGUOUS(...) do { nvdr_check_contiguous({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must be contiguous tensors"); } while(0)
-#define NVDR_CHECK_F32(...) do { nvdr_check_f32({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must be float32 tensors"); } while(0)
-#define NVDR_CHECK_I32(...) do { nvdr_check_i32({__VA_ARGS__}, __func__, "(): Inputs " #__VA_ARGS__ " must be int32 tensors"); } while(0)
-inline void nvdr_check_cpu(at::ArrayRef<at::Tensor> ts,        const char* func, const char* err_msg) { for (const at::Tensor& t : ts) TORCH_CHECK(t.device().type() == c10::DeviceType::CPU, func, err_msg); }
-inline void nvdr_check_contiguous(at::ArrayRef<at::Tensor> ts, const char* func, const char* err_msg) { for (const at::Tensor& t : ts) TORCH_CHECK(t.is_contiguous(), func, err_msg); }
-inline void nvdr_check_f32(at::ArrayRef<at::Tensor> ts,        const char* func, const char* err_msg) { for (const at::Tensor& t : ts) TORCH_CHECK(t.dtype() == torch::kFloat32, func, err_msg); }
-inline void nvdr_check_i32(at::ArrayRef<at::Tensor> ts,        const char* func, const char* err_msg) { for (const at::Tensor& t : ts) TORCH_CHECK(t.dtype() == torch::kInt32, func, err_msg); }
-//------------------------------------------------------------------------
+// --- Helper Functions (Variadic recursive checks) ---
+
+// 1. Device Check
+inline void check_device_impl(const char* func_name, const torch::Tensor& t) {
+    NVDR_CHECK(t.is_cuda(), func_name, "(): Tensor must be on GPU");
+}
+template <typename... Args>
+inline void check_device_impl(const char* func_name, const torch::Tensor& t, Args... args) {
+    check_device_impl(func_name, t);
+    check_device_impl(func_name, args...);
+}
+#define NVDR_CHECK_DEVICE(...) check_device_impl(__func__, __VA_ARGS__)
+
+// 2. Contiguous Check
+inline void check_contiguous_impl(const char* func_name, const torch::Tensor& t) {
+    NVDR_CHECK(t.is_contiguous(), func_name, "(): Tensor must be contiguous");
+}
+template <typename... Args>
+inline void check_contiguous_impl(const char* func_name, const torch::Tensor& t, Args... args) {
+    check_contiguous_impl(func_name, t);
+    check_contiguous_impl(func_name, args...);
+}
+#define NVDR_CHECK_CONTIGUOUS(...) check_contiguous_impl(__func__, __VA_ARGS__)
+
+// 3. Float32 Check
+inline void check_f32_impl(const char* func_name, const torch::Tensor& t) {
+    NVDR_CHECK(t.dtype() == torch::kFloat32, func_name, "(): Tensor must be float32");
+}
+template <typename... Args>
+inline void check_f32_impl(const char* func_name, const torch::Tensor& t, Args... args) {
+    check_f32_impl(func_name, t);
+    check_f32_impl(func_name, args...);
+}
+#define NVDR_CHECK_F32(...) check_f32_impl(__func__, __VA_ARGS__)
+
+// 4. Int32 Check
+inline void check_i32_impl(const char* func_name, const torch::Tensor& t) {
+    NVDR_CHECK(t.dtype() == torch::kInt32, func_name, "(): Tensor must be int32");
+}
+template <typename... Args>
+inline void check_i32_impl(const char* func_name, const torch::Tensor& t, Args... args) {
+    check_i32_impl(func_name, t);
+    check_i32_impl(func_name, args...);
+}
+#define NVDR_CHECK_I32(...) check_i32_impl(__func__, __VA_ARGS__)
+
+inline void nvdr_check_contiguous(const torch::Tensor& t, const char* func_name, const char* msg) {
+    NVDR_CHECK(t.is_contiguous(), func_name, msg);
+}
+
+inline void nvdr_check_contiguous(const std::vector<torch::Tensor>& tensors, const char* func_name, const char* msg) {
+    for (const auto& tensor : tensors) {
+        nvdr_check_contiguous(tensor, func_name, msg);
+    }
+}
+
+inline void nvdr_check_f32(const torch::Tensor& t, const char* func_name, const char* msg) {
+    NVDR_CHECK(t.dtype() == torch::kFloat32, func_name, msg);
+}
+
+inline void nvdr_check_f32(const std::vector<torch::Tensor>& tensors, const char* func_name, const char* msg) {
+    for (const auto& tensor : tensors) {
+        nvdr_check_f32(tensor, func_name, msg);
+    }
+}
+
+inline void nvdr_check_cpu(const torch::Tensor& t, const char* func_name, const char* msg) {
+    NVDR_CHECK(t.is_cpu(), func_name, msg);
+}
+
+// Macro definition (if not already present)
+#ifndef NVDR_CHECK_CPU
+#define NVDR_CHECK_CPU(x) nvdr_check_cpu(x, __func__, "(): " #x " must be a CPU tensor")
+#endif

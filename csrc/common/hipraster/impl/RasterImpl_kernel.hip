@@ -1,3 +1,4 @@
+#include "hip/hip_runtime.h"
 // Copyright (c) 2009-2022, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property
@@ -6,12 +7,12 @@
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-#include "../CudaRaster.hpp"
+#include "../HipRaster.hpp"
 #include "PrivateDefs.hpp"
 #include "Constants.hpp"
 #include "Util.inl"
 
-namespace CR
+namespace HR
 {
 
 //------------------------------------------------------------------------
@@ -29,9 +30,9 @@ namespace CR
 // Stage entry points.
 //------------------------------------------------------------------------
 
-__global__ void __launch_bounds__(CR_SETUP_WARPS * 32, CR_SETUP_OPT_BLOCKS)  triangleSetupKernel (const CR::CRParams p)  { CR::triangleSetupImpl(p); }
-__global__ void __launch_bounds__(CR_BIN_WARPS * 32, 1)                      binRasterKernel     (const CR::CRParams p)  { CR::binRasterImpl(p); }
-__global__ void __launch_bounds__(CR_COARSE_WARPS * 32, 1)                   coarseRasterKernel  (const CR::CRParams p)  { CR::coarseRasterImpl(p); }
-__global__ void __launch_bounds__(CR_FINE_MAX_WARPS * 32, 1)                 fineRasterKernel    (const CR::CRParams p)  { CR::fineRasterImpl(p); }
+__global__ void __launch_bounds__(HR_SETUP_WARPS * 32, HR_SETUP_OPT_BLOCKS)  triangleSetupKernel (const HR::HRParams p)  { HR::triangleSetupImpl(p); }
+__global__ void __launch_bounds__(HR_BIN_WARPS * 32, 1)                      binRasterKernel     (const HR::HRParams p)  { HR::binRasterImpl(p); }
+__global__ void __launch_bounds__(HR_COARSE_WARPS * 32, 1)                   coarseRasterKernel  (const HR::HRParams p)  { HR::coarseRasterImpl(p); }
+__global__ void __launch_bounds__(HR_FINE_MAX_WARPS * 32, 1)                 fineRasterKernel    (const HR::HRParams p)  { HR::fineRasterImpl(p); }
 
 //------------------------------------------------------------------------

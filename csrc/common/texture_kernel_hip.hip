@@ -1,3 +1,8 @@
+#define __ballot_sync(mask, predicate) __ballot(predicate)
+
+#include <hip/hip_runtime.h>
+#undef warpSize
+#include <torch/extension.h>
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property
@@ -7,7 +12,7 @@
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 #include "common.h"
-#include "texture.h"
+#include "texture_hip.h"
 
 //------------------------------------------------------------------------
 // Memory access and math helpers.

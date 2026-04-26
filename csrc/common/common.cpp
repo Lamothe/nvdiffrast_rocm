@@ -6,7 +6,7 @@
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-#include <cuda_runtime.h>
+#include <hip/hip_runtime.h>
 
 //------------------------------------------------------------------------
 // Block and grid size calculators for kernel launches.
@@ -51,9 +51,9 @@ dim3 getLaunchBlockSize(int maxWidth, int maxHeight, int width, int height)
 dim3 getLaunchGridSize(dim3 blockSize, int width, int height, int depth)
 {
     dim3 gridSize;
-    gridSize.x = (width  - 1) / blockSize.x + 1;
+    gridSize.x = (width - 1) / blockSize.x + 1;
     gridSize.y = (height - 1) / blockSize.y + 1;
-    gridSize.z = (depth  - 1) / blockSize.z + 1;
+    gridSize.z = (depth - 1) / blockSize.z + 1;
     return gridSize;
 }
 

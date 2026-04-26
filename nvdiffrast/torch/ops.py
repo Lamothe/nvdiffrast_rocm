@@ -41,7 +41,7 @@ def set_log_level(level):
     _nvdiffrast_c.set_log_level(level)
 
 #----------------------------------------------------------------------------
-# CudaRaster state wrapper.
+# HipRaster state wrapper.
 #----------------------------------------------------------------------------
 
 class RasterizeCudaContext:

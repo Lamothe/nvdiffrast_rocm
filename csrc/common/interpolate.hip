@@ -1,3 +1,21 @@
+// --- START FIX FOR ROCM 7.x / GFX1151 ---
+// 1. Force-disable the broken system builtins BEFORE any includes
+#ifdef HIP_ENABLE_WARP_SYNC_BUILTINS
+  #undef HIP_ENABLE_WARP_SYNC_BUILTINS
+#endif
+#define HIP_ENABLE_WARP_SYNC_BUILTINS 0
+
+// 2. Now it is safe to include the system headers
+#include <torch/extension.h>
+#include <hip/hip_runtime.h>
+
+// 3. Manually define the missing function AFTER the headers are loaded
+// This ensures we don't conflict with the system, but we provide the logic nvdiffrast needs.
+#ifndef __ballot_sync
+  #define __ballot_sync(mask, predicate) __ballot(predicate)
+#endif
+// --- END FIX ---
+
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 //
 // NVIDIA CORPORATION and its licensors retain all intellectual property
@@ -36,7 +54,7 @@ static __forceinline__ __device__ void InterpolateFwdKernelTemplate(const Interp
 
     // If no geometry in entire warp, zero the output and exit.
     // Otherwise force barys to zero and output with live threads.
-    if (__all_sync(0xffffffffu, !triValid))
+    if (__all_sync((unsigned long long)(~0ull), !triValid))
     {
         for (int i=0; i < p.numAttr; i++)
             out[i] = 0.f;
@@ -94,9 +112,9 @@ static __forceinline__ __device__ void InterpolateFwdKernelTemplate(const Interp
     float dvdx = db.z;
     float dvdy = db.w;
 
-    // Calculate the pixel differentials of chosen attributes.    
+    // Calculate the pixel differentials of chosen attributes.
     for (int i=0; i < p.numDiffAttr; i++)
-    {   
+    {
         // Input attribute index.
         int j = p.diff_attrs_all ? i : p.diffAttrs[i];
         if (j < 0)

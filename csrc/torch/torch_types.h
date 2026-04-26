@@ -9,17 +9,20 @@
 #include "torch_common.inl"
 
 //------------------------------------------------------------------------
-// Python CudaRaster state wrapper.
+// Python HipRaster state wrapper.
 
-namespace CR { class CudaRaster; }
+namespace HR
+{
+    class HipRaster;
+}
 class RasterizeCRStateWrapper
 {
 public:
-    RasterizeCRStateWrapper     (int cudaDeviceIdx);
-    ~RasterizeCRStateWrapper    (void);
+    RasterizeCRStateWrapper(int cudaDeviceIdx);
+    ~RasterizeCRStateWrapper(void);
 
-    CR::CudaRaster*             cr;
-    int                         cudaDeviceIdx;
+    HR::HipRaster *cr;
+    int cudaDeviceIdx;
 };
 
 //------------------------------------------------------------------------
@@ -28,12 +31,11 @@ public:
 class TextureMipWrapper
 {
 public:
-    torch::Tensor               mip;
-    int                         max_mip_level;
-    std::vector<int64_t>        texture_size;   // For error checking.
-    bool                        cube_mode;      // For error checking.
+    torch::Tensor mip;
+    int max_mip_level;
+    std::vector<int64_t> texture_size; // For error checking.
+    bool cube_mode;                    // For error checking.
 };
-
 
 //------------------------------------------------------------------------
 // Antialias topology hash wrapper to prevent intrusion from Python side.
@@ -41,7 +43,7 @@ public:
 class TopologyHashWrapper
 {
 public:
-    torch::Tensor               ev_hash;
+    torch::Tensor ev_hash;
 };
 
 //------------------------------------------------------------------------
