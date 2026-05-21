@@ -68,8 +68,10 @@ __global__ void RasterizeCudaFwdShaderKernel(const RasterizeCudaFwdShaderParams 
     float4 p2 = ((float4*)p.pos)[vi2];
 
     // Evaluate edge functions.
-    float fx = p.xs * (float)px + p.xo;
-    float fy = p.ys * (float)py + p.yo;
+    // Un-bias pixel coordinates by viewport offset (2048 subpixel units = 128 pixels)
+    // BEFORE NDC conversion to match the fine rasterizer's shifted coordinate space.
+    float fx = p.xs * ((float)px - 128.0f) + p.xo;
+    float fy = p.ys * ((float)py - 128.0f) + p.yo;
     float p0x = p0.x - fx * p0.w;
     float p0y = p0.y - fy * p0.w;
     float p1x = p1.x - fx * p1.w;
@@ -183,8 +185,10 @@ static __forceinline__ __device__ void RasterizeGradKernelTemplate(const Rasteri
     float4 p2 = ((float4*)p.pos)[vi2];
 
     // Evaluate edge functions.
-    float fx = p.xs * (float)px + p.xo;
-    float fy = p.ys * (float)py + p.yo;
+    // Un-bias pixel coordinates by viewport offset (2048 subpixel units = 128 pixels)
+    // BEFORE NDC conversion to match the fine rasterizer's shifted coordinate space.
+    float fx = p.xs * ((float)px - 128.0f) + p.xo;
+    float fy = p.ys * ((float)py - 128.0f) + p.yo;
     float p0x = p0.x - fx * p0.w;
     float p0y = p0.y - fy * p0.w;
     float p1x = p1.x - fx * p1.w;
