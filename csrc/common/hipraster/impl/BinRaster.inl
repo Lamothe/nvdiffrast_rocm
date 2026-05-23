@@ -5,6 +5,14 @@
 #define WAVE32_ANY(pred) (WAVE32_BALLOT(pred) != 0)
 #define WAVE32_ALL(pred) (WAVE32_BALLOT(pred) == 0xFFFFFFFFu)
 
+// FIX: Wave32-scoped shuffle primitives for 64-lane AMD wavefronts
+// __shfl_up: source = max(myLane - delta, subWaveBase)
+#define WAVE32_SHFL_UP(val, delta, myLane) \
+    __shfl(val, (myLane) - (delta) < 0 ? 0 : (myLane) - (delta))
+// __shfl_down: source = min(myLane + delta, subWaveEnd)
+#define WAVE32_SHFL_DOWN(val, delta, myLane) \
+    __shfl(val, (myLane) + (delta) >= 32 ? 31 : (myLane) + (delta))
+
 __device__ __forceinline__ void binRasterImpl(const HRParams p)
 {
     __shared__ uint32_t s_broadcast[HR_BIN_WARPS + 16];
@@ -36,6 +44,7 @@ __device__ __forceinline__ void binRasterImpl(const HRParams p)
 
     int thrInBlock = threadIdx.x + threadIdx.y * 32;
     int batchPos = 0;
+    int myLane = __lane_id() & 31; // FIX: sub-wave lane ID for 64-lane AMD wavefronts
 
     if (thrInBlock < 16)
         s_broadcast[thrInBlock] = 0;
@@ -74,27 +83,27 @@ __device__ __forceinline__ void binRasterImpl(const HRParams p)
 #pragma unroll
                 for (int offset = 1; offset < 32; offset *= 2)
                 {
-                    uint32_t neighbor = __shfl_up(sum, offset);
-                    if (threadIdx.x >= offset)
+                    uint32_t neighbor = WAVE32_SHFL_UP(sum, offset, myLane);
+                    if (myLane >= offset)
                         sum += neighbor;
                 }
 
                 uint32_t myIdx = sum - num;
-                uint32_t warpTotal = __shfl(sum, __lane_id() - threadIdx.x + 31);
+                uint32_t warpTotal = __shfl(sum, myLane - threadIdx.x + 31);
 
-                if (threadIdx.x == 31)
+                if (myLane == 31)
                     s_broadcast[threadIdx.y + 16] = warpTotal;
                 __syncthreads();
 
                 if (threadIdx.y == 0)
                 {
-                    uint32_t val = (threadIdx.x < HR_BIN_WARPS) ? s_broadcast[threadIdx.x + 16] : 0;
+                    uint32_t val = (myLane < HR_BIN_WARPS) ? s_broadcast[myLane + 16] : 0;
                     uint32_t valSum = val;
 #pragma unroll
                     for (int offset = 1; offset < 32; offset *= 2)
                     {
-                        uint32_t neighbor = __shfl_up(valSum, offset);
-                        if (threadIdx.x >= offset)
+                        uint32_t neighbor = WAVE32_SHFL_UP(valSum, offset, myLane);
+                        if (myLane >= offset)
                             valSum += neighbor;
                     }
                     if (threadIdx.x < HR_BIN_WARPS)
@@ -271,7 +280,7 @@ __device__ __forceinline__ void binRasterImpl(const HRParams p)
                         baseOver = atomicAdd(&s_overTotal, warpOverTotal);
                     }
 
-                    baseOver = __shfl(baseOver, __lane_id() - threadIdx.x + firstOvrLane);
+                    baseOver = __shfl(baseOver, myLane - threadIdx.x + firstOvrLane);
                     if (ovr)
                     {
                         overIndex += baseOver;
