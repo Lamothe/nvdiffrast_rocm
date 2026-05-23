@@ -5,6 +5,12 @@
 #define WAVE32_ANY(pred) (WAVE32_BALLOT(pred) != 0)
 #define WAVE32_ALL(pred) (WAVE32_BALLOT(pred) == 0xFFFFFFFFu)
 
+// FIX: Wave32-scoped shuffle primitives for 64-lane AMD wavefronts
+#define WAVE32_SHFL_UP(val, delta, myLane) \
+    __shfl(val, (myLane) - (delta) < 0 ? 0 : (myLane) - (delta))
+#define WAVE32_SHFL_DOWN(val, delta, myLane) \
+    __shfl(val, (myLane) + (delta) >= 32 ? 31 : (myLane) + (delta))
+
 __device__ __forceinline__ int globalTileIdx(int tileInBin, int widthTiles)
 {
     int tileX = tileInBin & (HR_BIN_SIZE - 1);
@@ -50,6 +56,7 @@ __device__ __forceinline__ void coarseRasterImpl(const HRParams p)
     int tileLog = HR_TILE_LOG2 + HR_SUBPIXEL_LOG2;
     int thrInBlock = threadIdx.x + threadIdx.y * 32;
     int emitShift = HR_BIN_LOG2 * 2 + 5;
+    int myLane = __lane_id() & 31; // FIX: sub-wave lane ID for 64-lane AMD wavefronts
 
     if (atomics.numSubtris > p.maxSubtris || atomics.numBinSegs > p.maxBinSegs)
         return;
@@ -235,12 +242,12 @@ __device__ __forceinline__ void coarseRasterImpl(const HRParams p)
 #pragma unroll
                         for (int offset = 1; offset < 32; offset *= 2)
                         {
-                            uint32_t neighbor = __shfl_up(aabbMask, offset);
-                            if (threadIdx.x >= offset)
+                            uint32_t neighbor = WAVE32_SHFL_UP(aabbMask, offset, myLane);
+                            if (myLane >= offset)
                                 aabbMask |= neighbor;
                         }
 
-                        aabbMask = __shfl(aabbMask, __lane_id() - threadIdx.x + 31);
+                        aabbMask = __shfl(aabbMask, myLane - threadIdx.x + 31);
 
                         uint32_t maskX = aabbMask & 0xFFFF;
                         uint32_t maskY = aabbMask >> 16;
@@ -353,13 +360,13 @@ __device__ __forceinline__ void coarseRasterImpl(const HRParams p)
 #pragma unroll
                         for (int offset = 1; offset < 32; offset *= 2)
                         {
-                            uint32_t n = __shfl_up(sum, offset);
-                            if (threadIdx.x >= offset)
+                            uint32_t n = WAVE32_SHFL_UP(sum, offset, myLane);
+                            if (myLane >= offset)
                                 sum += n;
                         }
                         s_tileEmitPrefixSum[tileInBin + 1] = sum;
 
-                        if (threadIdx.x == 31)
+                        if (myLane == 31)
                             s_scanTemp[0][(tileInBin >> 5) + 16] = sum;
                     }
                 }
@@ -368,16 +375,16 @@ __device__ __forceinline__ void coarseRasterImpl(const HRParams p)
 
                 if (threadIdx.y == 0)
                 {
-                    uint32_t sum = (threadIdx.x < HR_BIN_SQR / 32) ? s_scanTemp[0][threadIdx.x + 16] : 0;
+                    uint32_t sum = (myLane < HR_BIN_SQR / 32) ? s_scanTemp[0][myLane + 16] : 0;
 #pragma unroll
                     for (int offset = 1; offset < 32; offset *= 2)
                     {
-                        uint32_t n = __shfl_up(sum, offset);
-                        if (threadIdx.x >= offset)
+                        uint32_t n = WAVE32_SHFL_UP(sum, offset, myLane);
+                        if (myLane >= offset)
                             sum += n;
                     }
-                    if (threadIdx.x < HR_BIN_SQR / 32)
-                        s_scanTemp[0][threadIdx.x + 16] = sum;
+                    if (myLane < HR_BIN_SQR / 32)
+                        s_scanTemp[0][myLane + 16] = sum;
                 }
                 __syncthreads();
 
@@ -618,17 +625,17 @@ __device__ __forceinline__ void coarseRasterImpl(const HRParams p)
 
         if (threadIdx.y == 0)
         {
-            uint32_t sum = (threadIdx.x < HR_BIN_SQR / 32) ? s_scanTemp[0][threadIdx.x + 16] : 0;
+            uint32_t sum = (myLane < HR_BIN_SQR / 32) ? s_scanTemp[0][myLane + 16] : 0;
 #pragma unroll
             for (int offset = 1; offset < 32; offset *= 2)
             {
-                uint32_t n = __shfl_up(sum, offset);
-                if (threadIdx.x >= offset)
+                uint32_t n = WAVE32_SHFL_UP(sum, offset, myLane);
+                if (myLane >= offset)
                     sum += n;
             }
-            if (threadIdx.x < HR_BIN_SQR / 32)
-                s_scanTemp[0][threadIdx.x + 16] = sum;
-            if (threadIdx.x == HR_BIN_SQR / 32 - 1)
+            if (myLane < HR_BIN_SQR / 32)
+                s_scanTemp[0][myLane + 16] = sum;
+            if (myLane == HR_BIN_SQR / 32 - 1)
                 s_firstActiveIdx = atomicAdd(&atomics.numActiveTiles, sum);
         }
 

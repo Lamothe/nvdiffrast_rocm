@@ -9,11 +9,13 @@
 #include <torch/extension.h>
 #include <hip/hip_runtime.h>
 
-// 3. Manually define the missing function AFTER the headers are loaded
-// This ensures we don't conflict with the system, but we provide the logic nvdiffrast needs.
-#ifndef __ballot_sync
-  #define __ballot_sync(mask, predicate) __ballot(predicate)
+// 3. Properly handle 64-lane wavefronts on AMD GPUs
+// WAVE32_BALLOT extracts the correct 32-bit mask for each thread's 32-lane sub-wave
+#ifndef WAVE32_BALLOT
+  #define WAVE32_BALLOT(pred) ((uint32_t)(__ballot(pred) >> ((__lane_id() >> 5) << 5)))
 #endif
+// __ballot_sync: scope to 32-lane sub-wave, not full 64-lane wavefront
+#define __ballot_sync(mask, predicate) WAVE32_BALLOT(predicate)
 // --- END FIX ---
 
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.

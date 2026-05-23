@@ -30,9 +30,10 @@ namespace HR
 // Stage entry points.
 //------------------------------------------------------------------------
 
-__global__ void __launch_bounds__(HR_SETUP_WARPS * 32, HR_SETUP_OPT_BLOCKS)  triangleSetupKernel (const HR::HRParams p)  { HR::triangleSetupImpl(p); }
-__global__ void __launch_bounds__(HR_BIN_WARPS * 32, 1)                      binRasterKernel     (const HR::HRParams p)  { HR::binRasterImpl(p); }
-__global__ void __launch_bounds__(HR_COARSE_WARPS * 32, 1)                   coarseRasterKernel  (const HR::HRParams p)  { HR::coarseRasterImpl(p); }
-__global__ void __launch_bounds__(HR_FINE_MAX_WARPS * 32, 1)                 fineRasterKernel    (const HR::HRParams p)  { HR::fineRasterImpl(p); }
+// FIX: Change * 32 to * 64 for AMD 64-lane wavefronts
+__global__ void __launch_bounds__(HR_SETUP_WARPS * 64, HR_SETUP_OPT_BLOCKS)  triangleSetupKernel (const HR::HRParams p)  { HR::triangleSetupImpl(p); }
+__global__ void __launch_bounds__(HR_BIN_WARPS * 64, 1)                      binRasterKernel     (const HR::HRParams p)  { HR::binRasterImpl(p); }
+__global__ void __launch_bounds__(HR_COARSE_WARPS * 64, 1)                   coarseRasterKernel  (const HR::HRParams p)  { HR::coarseRasterImpl(p); }
+__global__ void __launch_bounds__(HR_FINE_MAX_WARPS * 64, 1)                 fineRasterKernel    (const HR::HRParams p)  { HR::fineRasterImpl(p); }
 
 //------------------------------------------------------------------------

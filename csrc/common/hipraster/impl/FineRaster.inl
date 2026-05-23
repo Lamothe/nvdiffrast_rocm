@@ -5,6 +5,12 @@
 #define WAVE32_ANY(pred) (WAVE32_BALLOT(pred) != 0)
 #define WAVE32_ALL(pred) (WAVE32_BALLOT(pred) == 0xFFFFFFFFu)
 
+// FIX: Wave32-scoped shuffle primitives for 64-lane AMD wavefronts
+#define WAVE32_SHFL_UP(val, delta, myLane) \
+    __shfl(val, (myLane) - (delta) < 0 ? 0 : (myLane) - (delta))
+#define WAVE32_SHFL_DOWN(val, delta, myLane) \
+    __shfl(val, (myLane) + (delta) >= 32 ? 31 : (myLane) + (delta))
+
 __device__ __forceinline__ void initTileZMax(uint32_t &tileZMax, bool &tileZUpd, volatile uint32_t *tileDepth)
 {
     tileZMax = HR_DEPTH_MAX;
@@ -13,6 +19,8 @@ __device__ __forceinline__ void initTileZMax(uint32_t &tileZMax, bool &tileZUpd,
 
 __device__ __forceinline__ void updateTileZMax(uint32_t &tileZMax, bool &tileZUpd, volatile uint32_t *tileDepth)
 {
+    int myLane = __lane_id() & 31; // FIX: sub-wave lane ID for 64-lane AMD wavefronts
+
     if (WAVE32_ANY(tileZUpd))
     {
         uint32_t z = ::max(tileDepth[threadIdx.x], tileDepth[threadIdx.x + 32]);
@@ -20,12 +28,13 @@ __device__ __forceinline__ void updateTileZMax(uint32_t &tileZMax, bool &tileZUp
 #pragma unroll
         for (int offset = 16; offset > 0; offset /= 2)
         {
-            uint32_t neighbor = __shfl_down(z, offset);
-            if (threadIdx.x + offset < 32)
+            uint32_t srcLane = myLane + offset;
+            uint32_t neighbor = __shfl(z, srcLane < 32 ? srcLane : 31); // FIX: clamp to sub-wave
+            if (myLane + offset < 32)
                 z = ::max(z, neighbor);
         }
 
-        tileZMax = __shfl(z, __lane_id() - threadIdx.x);
+        tileZMax = __shfl(z, 0); // FIX: broadcast from lane 0 of sub-wave
         tileZUpd = false;
     }
 }
@@ -105,15 +114,17 @@ __device__ __forceinline__ uint64_t trianglePixelCoverage(const HRParams &p, con
 
 __device__ __forceinline__ uint32_t scan32_value(uint32_t value, uint32_t &total)
 {
+    int myLane = __lane_id() & 31; // FIX: sub-wave lane ID for 64-lane AMD wavefronts
     uint32_t sum = value;
 #pragma unroll
     for (int offset = 1; offset < 32; offset *= 2)
     {
-        uint32_t n = __shfl_up(sum, offset);
-        if (threadIdx.x >= offset)
+        uint32_t srcLane = myLane - offset;
+        uint32_t n = __shfl(sum, srcLane < 0 ? 0 : srcLane); // FIX: clamp to sub-wave
+        if (myLane >= offset)
             sum += n;
     }
-    total = __shfl(sum, __lane_id() - threadIdx.x + 31);
+    total = __shfl(sum, 31); // FIX: broadcast from lane 31 of sub-wave
     return sum;
 }
 
@@ -199,12 +210,14 @@ __device__ __forceinline__ void fineRasterImpl(const HRParams p)
     cover8x8_setupLUT(s_cover8x8_lut);
     __syncthreads();
 
+    int myLane = __lane_id() & 31; // FIX: sub-wave lane ID for 64-lane AMD wavefronts
+
     for (;;)
     {
         uint32_t activeIdx = 0;
-        if (threadIdx.x == 0)
+        if (myLane == 0)
             activeIdx = atomicAdd(&atomics.fineCounter, 1);
-        activeIdx = __shfl(activeIdx, __lane_id() - threadIdx.x);
+        activeIdx = __shfl(activeIdx, 0); // FIX: broadcast from lane 0 of sub-wave
 
         if (activeIdx >= atomics.numActiveTiles)
             break;
@@ -324,9 +337,9 @@ __device__ __forceinline__ void fineRasterImpl(const HRParams p)
 #pragma unroll
             for (int i = 0; i < 32; ++i)
             {
-                if (__shfl(isBoundary, __lane_id() - threadIdx.x + i))
+                if (__shfl(isBoundary, myLane - threadIdx.x + i))
                 {
-                    uint32_t shiftAmt = __shfl(triangleFrag[(triRead + i) & 63] - fragRead, __lane_id() - threadIdx.x + i) - 1;
+                    uint32_t shiftAmt = __shfl(triangleFrag[(triRead + i) & 63] - fragRead, myLane - threadIdx.x + i) - 1;
                     if (shiftAmt < 32)
                         boundaryMask |= (1u << shiftAmt);
                 }

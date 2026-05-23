@@ -1,4 +1,7 @@
-#define __ballot_sync(mask, predicate) __ballot(predicate)
+#ifndef WAVE32_BALLOT
+  #define WAVE32_BALLOT(pred) ((uint32_t)(__ballot(pred) >> ((__lane_id() >> 5) << 5)))
+#endif
+#define __ballot_sync(mask, predicate) WAVE32_BALLOT(predicate)
 
 #include <hip/hip_runtime.h>
 #undef warpSize

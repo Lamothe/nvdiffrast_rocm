@@ -9,11 +9,23 @@
 #include <torch/extension.h>
 #include <hip/hip_runtime.h>
 
-// 3. Manually define the missing function AFTER the headers are loaded
-// This ensures we don't conflict with the system, but we provide the logic nvdiffrast needs.
-#ifndef __ballot_sync
-  #define __ballot_sync(mask, predicate) __ballot(predicate)
+// 3. Properly handle 64-lane wavefronts on AMD GPUs
+// WAVE32_BALLOT extracts the correct 32-bit mask for each thread's 32-lane sub-wave
+#ifndef WAVE32_BALLOT
+  #define WAVE32_BALLOT(pred) ((uint32_t)(__ballot(pred) >> ((__lane_id() >> 5) << 5)))
 #endif
+#ifndef WAVE32_ALL
+  #define WAVE32_ALL(pred) (WAVE32_BALLOT(pred) == 0xFFFFFFFFu)
+#endif
+
+// __ballot_sync: scope to 32-lane sub-wave, not full 64-lane wavefront
+#define __ballot_sync(mask, predicate) WAVE32_BALLOT(predicate)
+
+// __all_sync: scope to 32-lane sub-wave (fix for bug #4)
+static __device__ __forceinline__ bool __all_sync_32(bool pred)
+{
+    return WAVE32_BALLOT(pred) == 0xFFFFFFFFu;
+}
 // --- END FIX ---
 
 // Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
@@ -54,7 +66,7 @@ static __forceinline__ __device__ void InterpolateFwdKernelTemplate(const Interp
 
     // If no geometry in entire warp, zero the output and exit.
     // Otherwise force barys to zero and output with live threads.
-    if (__all_sync((unsigned long long)(~0ull), !triValid))
+    if (__all_sync_32(!triValid))
     {
         for (int i=0; i < p.numAttr; i++)
             out[i] = 0.f;
